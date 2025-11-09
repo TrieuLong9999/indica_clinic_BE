@@ -28,6 +28,9 @@ public class CreateUserRequest {
     @Size(max = 100, message = "Họ tên không được quá 100 ký tự")
     private String fullName;
 
+    @Size(max = 20, message = "Số điện thoại không được quá 20 ký tự")
+    private String phoneNumber;
+
     private Boolean enabled = true;
 
     private Set<String> roles; // Tên các roles: SUPERADMIN, ADMIN, etc.

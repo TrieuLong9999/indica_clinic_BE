@@ -30,5 +30,9 @@ public interface UserService {
     UserResponse updateUserFromRequest(Long id, UpdateUserRequest request);
     UserResponse getUserResponseById(Long id);
     List<UserResponse> getAllUserResponses();
+    
+    // Profile methods
+    UserResponse updateProfile(Long userId, com.clinic.indica.dto.UpdateProfileRequest request);
+    UserResponse getCurrentUserProfile(Long userId);
 }
 

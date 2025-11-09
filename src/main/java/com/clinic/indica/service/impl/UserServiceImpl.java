@@ -188,6 +188,7 @@ public class UserServiceImpl implements UserService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setEmail(request.getEmail());
         user.setFullName(request.getFullName());
+        user.setPhoneNumber(request.getPhoneNumber());
         user.setEnabled(request.getEnabled() != null ? request.getEnabled() : true);
 
         // Gán roles nếu có
@@ -240,6 +241,9 @@ public class UserServiceImpl implements UserService {
         if (request.getFullName() != null) {
             user.setFullName(request.getFullName());
         }
+        if (request.getPhoneNumber() != null) {
+            user.setPhoneNumber(request.getPhoneNumber());
+        }
         if (request.getEnabled() != null) {
             user.setEnabled(request.getEnabled());
         }
@@ -283,12 +287,53 @@ public class UserServiceImpl implements UserService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    @Transactional
+    public UserResponse updateProfile(Long userId, com.clinic.indica.dto.UpdateProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        // Kiểm tra email trùng (nếu thay đổi)
+        if (request.getEmail() != null && !request.getEmail().isEmpty() &&
+            !user.getEmail().equals(request.getEmail()) &&
+            userRepository.existsByEmail(request.getEmail())) {
+            throw new DuplicateResourceException("User", "email", request.getEmail());
+        }
+
+        // Cập nhật các trường
+        if (request.getFullName() != null) {
+            user.setFullName(request.getFullName());
+        }
+        if (request.getEmail() != null && !request.getEmail().isEmpty()) {
+            user.setEmail(request.getEmail());
+        }
+        if (request.getPhoneNumber() != null) {
+            user.setPhoneNumber(request.getPhoneNumber());
+        }
+        if (request.getPassword() != null && !request.getPassword().isEmpty()) {
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+            // Khi đổi mật khẩu, xóa tất cả refresh tokens để logout tất cả thiết bị
+            refreshTokenRepository.deleteAllByUserId(userId);
+        }
+
+        User updatedUser = userRepository.save(user);
+        return convertToUserResponse(updatedUser);
+    }
+
+    @Override
+    public UserResponse getCurrentUserProfile(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        return convertToUserResponse(user);
+    }
+
     private UserResponse convertToUserResponse(User user) {
         UserResponse response = new UserResponse();
         response.setId(user.getId());
         response.setUsername(user.getUsername());
         response.setEmail(user.getEmail());
         response.setFullName(user.getFullName());
+        response.setPhoneNumber(user.getPhoneNumber());
         response.setEnabled(user.getEnabled());
         response.setCreatedAt(user.getCreatedAt());
         response.setUpdatedAt(user.getUpdatedAt());

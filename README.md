@@ -13,24 +13,29 @@ Hệ thống quản lý phòng khám với Spring Boot, JWT Authentication, và 
 - [Authentication](#authentication)
 - [Database Schema](#database-schema)
 - [Roles và Permissions](#roles-và-permissions)
+- [Response Format](#response-format)
+- [Tính năng bảo mật](#tính-năng-bảo-mật)
 
 ## 🎯 Tổng quan
 
 Dự án Indica Clinic là hệ thống quản lý phòng khám được xây dựng bằng Spring Boot, cung cấp:
 - Xác thực người dùng với JWT và Refresh Token
-- Quản lý người dùng và phân quyền
+- Hỗ trợ đăng nhập trên nhiều thiết bị
+- Quản lý người dùng và phân quyền (SUPERADMIN, ADMIN, RECEPTIONIST, DOCTOR, NURSE, PATIENT)
+- API quản lý profile cá nhân
 - RESTful API với Swagger documentation
+- Response format chuẩn (ApiResponse)
 - Kết nối PostgreSQL database
 
 ## 🛠 Công nghệ sử dụng
 
 - **Java 17**
-- **Spring Boot 3.5.7**
+- **Spring Boot 3.3.5**
 - **Spring Security** - Xác thực và phân quyền
 - **Spring Data JPA** - ORM và database access
 - **PostgreSQL** - Database
 - **JWT (jjwt 0.12.3)** - Token-based authentication
-- **Swagger/OpenAPI 3** - API documentation
+- **Swagger/OpenAPI 2.6.0** - API documentation
 - **Lombok** - Giảm boilerplate code
 - **Maven** - Dependency management
 
@@ -46,22 +51,31 @@ indica/
 │   │   │   │   ├── SecurityConfig.java      # Cấu hình Spring Security
 │   │   │   │   └── SwaggerConfig.java        # Cấu hình Swagger/OpenAPI
 │   │   │   ├── controller/          # REST Controllers
-│   │   │   │   └── AuthController.java      # Controller xử lý authentication
+│   │   │   │   ├── AuthController.java      # Controller xử lý authentication
+│   │   │   │   ├── ProfileController.java   # Controller quản lý profile cá nhân
+│   │   │   │   └── UserController.java      # Controller quản lý users (Admin)
 │   │   │   ├── dto/                 # Data Transfer Objects
+│   │   │   │   ├── ApiResponse.java         # Format response chuẩn
 │   │   │   │   ├── AuthResponse.java        # Response sau khi login/refresh
+│   │   │   │   ├── CreateUserRequest.java   # Request tạo user
 │   │   │   │   ├── LoginRequest.java        # Request đăng nhập
-│   │   │   │   └── RefreshTokenRequest.java # Request refresh token
+│   │   │   │   ├── RefreshTokenRequest.java # Request refresh token
+│   │   │   │   ├── UpdateProfileRequest.java # Request cập nhật profile
+│   │   │   │   ├── UpdateUserRequest.java   # Request cập nhật user
+│   │   │   │   └── UserResponse.java        # Response thông tin user
 │   │   │   ├── entity/              # JPA Entities
-│   │   │   │   ├── User.java                # Entity người dùng
-│   │   │   │   └── Role.java                # Entity vai trò
+│   │   │   │   ├── RefreshToken.java        # Entity refresh token (nhiều thiết bị)
+│   │   │   │   ├── Role.java                # Entity vai trò
+│   │   │   │   └── User.java                # Entity người dùng
 │   │   │   ├── exception/           # Exception handlers
 │   │   │   │   ├── DuplicateResourceException.java
 │   │   │   │   ├── GlobalExceptionHandler.java
 │   │   │   │   ├── InvalidTokenException.java
 │   │   │   │   └── ResourceNotFoundException.java
 │   │   │   ├── repository/         # JPA Repositories
-│   │   │   │   ├── UserRepository.java
-│   │   │   │   └── RoleRepository.java
+│   │   │   │   ├── RefreshTokenRepository.java # Repository refresh tokens
+│   │   │   │   ├── RoleRepository.java
+│   │   │   │   └── UserRepository.java
 │   │   │   ├── security/            # Security components
 │   │   │   │   └── JwtAuthenticationFilter.java # JWT filter
 │   │   │   ├── service/             # Service layer
@@ -163,19 +177,26 @@ Content-Type: application/json
 Request Body:
 {
   "username": "admin",
-  "password": "admin"
+  "password": "admin",
+  "deviceId": "device-123",      // Optional
+  "deviceName": "iPhone 14"       // Optional
 }
 
-Response:
+Response Format (ApiResponse):
 {
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "tokenType": "Bearer",
-  "userId": 1,
-  "username": "admin",
-  "email": "admin@indica.clinic",
-  "fullName": "Super Administrator",
-  "roles": ["SUPERADMIN"]
+  "code": 200,
+  "message": "Đăng nhập thành công",
+  "status": "SUCCESS",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "tokenType": "Bearer",
+    "userId": 1,
+    "username": "admin",
+    "email": "admin@indica.clinic",
+    "fullName": "Super Administrator",
+    "roles": ["SUPERADMIN"]
+  }
 }
 ```
 
@@ -189,7 +210,126 @@ Request Body:
   "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 
-Response: (Tương tự như login response)
+Response Format (ApiResponse):
+{
+  "code": 200,
+  "message": "Làm mới token thành công",
+  "status": "SUCCESS",
+  "data": { ... } // Tương tự như login response
+}
+```
+
+### Profile Management (Yêu cầu JWT Token)
+
+#### 1. Lấy thông tin cá nhân
+```
+GET /api/profile
+Authorization: Bearer <access_token>
+
+Response:
+{
+  "code": 200,
+  "message": "Lấy thông tin cá nhân thành công",
+  "status": "SUCCESS",
+  "data": {
+    "id": 1,
+    "username": "admin",
+    "email": "admin@indica.clinic",
+    "fullName": "Super Administrator",
+    "phoneNumber": "0123456789",
+    "enabled": true,
+    "roles": ["SUPERADMIN"],
+    "createdAt": "2024-11-09T20:00:00",
+    "updatedAt": "2024-11-09T20:00:00"
+  }
+}
+```
+
+#### 2. Cập nhật thông tin cá nhân
+```
+PUT /api/profile
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+Request Body:
+{
+  "fullName": "Nguyễn Văn A",        // Optional
+  "email": "newemail@example.com",    // Optional
+  "phoneNumber": "0987654321",         // Optional
+  "password": "newpassword123"        // Optional - Khi đổi sẽ logout tất cả thiết bị
+}
+
+Response (khi đổi mật khẩu):
+{
+  "code": 200,
+  "message": "Cập nhật thông tin thành công. Mật khẩu đã được đổi, tất cả các thiết bị đã bị đăng xuất.",
+  "status": "SUCCESS",
+  "data": { ... }
+}
+```
+
+### User Management (Chỉ SUPERADMIN và ADMIN)
+
+#### 1. Tạo người dùng mới
+```
+POST /api/users
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+Request Body:
+{
+  "username": "newuser",
+  "password": "password123",
+  "email": "user@example.com",
+  "fullName": "New User",
+  "phoneNumber": "0123456789",
+  "enabled": true,
+  "roles": ["PATIENT"]
+}
+
+Response Format (ApiResponse):
+{
+  "code": 201,
+  "message": "Tạo người dùng thành công",
+  "status": "CREATED",
+  "data": { ... }
+}
+```
+
+#### 2. Lấy danh sách người dùng
+```
+GET /api/users
+Authorization: Bearer <access_token>
+```
+
+#### 3. Lấy thông tin người dùng theo ID
+```
+GET /api/users/{id}
+Authorization: Bearer <access_token>
+```
+
+#### 4. Cập nhật người dùng
+```
+PUT /api/users/{id}
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+Request Body:
+{
+  "username": "updateduser",     // Optional
+  "password": "newpass",          // Optional
+  "email": "newemail@example.com", // Optional
+  "fullName": "Updated Name",     // Optional
+  "phoneNumber": "0987654321",     // Optional
+  "enabled": true,                // Optional
+  "roles": ["DOCTOR"]             // Optional
+}
+```
+
+#### 5. Xóa người dùng
+```
+DELETE /api/users/{id}
+Authorization: Bearer <access_token>
 ```
 
 ### Sử dụng Access Token
@@ -204,9 +344,16 @@ Authorization: Bearer <access_token>
 ### JWT Token Flow
 
 1. **Login**: User gửi username/password → Nhận access token và refresh token
-2. **Access Token**: Dùng để xác thực các request (thời hạn ngắn)
-3. **Refresh Token**: Dùng để lấy access token mới khi hết hạn (thời hạn dài)
-4. **Token Storage**: Refresh token được lưu trong database
+2. **Access Token**: Dùng để xác thực các request (thời hạn ngắn - 24 giờ)
+3. **Refresh Token**: Dùng để lấy access token mới khi hết hạn (thời hạn dài - 7 ngày)
+4. **Token Storage**: Refresh token được lưu trong bảng `refresh_tokens` riêng (hỗ trợ nhiều thiết bị)
+
+### Đăng nhập nhiều thiết bị
+
+- Mỗi thiết bị có refresh token riêng
+- User có thể đăng nhập trên nhiều thiết bị cùng lúc
+- Mỗi refresh token lưu thông tin: deviceId, deviceName, ipAddress, userAgent
+- Khi đổi mật khẩu → Tất cả refresh tokens bị xóa → Logout tất cả thiết bị
 
 ### Security Configuration
 
@@ -227,11 +374,26 @@ CREATE TABLE users (
     password VARCHAR(255) NOT NULL,
     email VARCHAR(100) NOT NULL,
     full_name VARCHAR(100),
+    phone_number VARCHAR(20),
     enabled BOOLEAN NOT NULL DEFAULT true,
-    refresh_token VARCHAR(255),
-    refresh_token_expiry TIMESTAMP,
     created_at TIMESTAMP,
     updated_at TIMESTAMP
+);
+```
+
+### Refresh Tokens Table
+```sql
+CREATE TABLE refresh_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    token VARCHAR(500) UNIQUE NOT NULL,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_id VARCHAR(255),
+    device_name VARCHAR(255),
+    ip_address VARCHAR(50),
+    user_agent VARCHAR(500),
+    expiry_date TIMESTAMP NOT NULL,
+    created_at TIMESTAMP,
+    last_used_at TIMESTAMP
 );
 ```
 
@@ -246,8 +408,8 @@ CREATE TABLE roles (
 ### User Roles (Many-to-Many)
 ```sql
 CREATE TABLE user_roles (
-    user_id BIGINT REFERENCES users(id),
-    role_id BIGINT REFERENCES roles(id),
+    user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+    role_id BIGINT REFERENCES roles(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, role_id)
 );
 ```
@@ -288,8 +450,25 @@ Khi ứng dụng khởi động lần đầu, hệ thống tự động tạo:
 - **Password**: `admin`
 - **Role**: `SUPERADMIN`
 - **Email**: `admin@indica.clinic`
+- **Full Name**: `Super Administrator`
 
 ⚠️ **Lưu ý**: Đổi mật khẩu ngay sau lần đăng nhập đầu tiên trong môi trường production!
+
+## 🔒 Tính năng bảo mật
+
+### Đăng nhập nhiều thiết bị
+- User có thể đăng nhập trên nhiều thiết bị cùng lúc
+- Mỗi thiết bị có refresh token riêng
+- Refresh token lưu thông tin thiết bị: deviceId, deviceName, IP, User-Agent
+
+### Đổi mật khẩu
+- Khi user đổi mật khẩu → Tất cả refresh tokens bị xóa
+- Tất cả thiết bị sẽ bị logout tự động
+- User phải đăng nhập lại với mật khẩu mới
+
+### Phân quyền
+- **SUPERADMIN, ADMIN**: Có quyền tạo và quản lý tài khoản user
+- **Tất cả user đã đăng nhập**: Có quyền cập nhật thông tin cá nhân của mình
 
 ## 🧪 Testing
 
@@ -311,14 +490,37 @@ Khi ứng dụng khởi động lần đầu, hệ thống tự động tạo:
 ### Test với cURL
 
 ```bash
-# Login
+# 1. Login
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin"}'
+  -d '{"username":"admin","password":"admin","deviceId":"device-123","deviceName":"Desktop"}'
 
-# Sử dụng token
-curl -X GET http://localhost:8080/api/your-endpoint \
+# Response sẽ có accessToken và refreshToken trong data
+
+# 2. Lấy thông tin cá nhân
+curl -X GET http://localhost:8080/api/profile \
   -H "Authorization: Bearer <access_token>"
+
+# 3. Cập nhật thông tin cá nhân
+curl -X PUT http://localhost:8080/api/profile \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fullName": "Nguyễn Văn A",
+    "email": "newemail@example.com",
+    "phoneNumber": "0987654321"
+  }'
+
+# 4. Đổi mật khẩu (sẽ logout tất cả thiết bị)
+curl -X PUT http://localhost:8080/api/profile \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"password": "newpassword123"}'
+
+# 5. Refresh token
+curl -X POST http://localhost:8080/api/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken": "<refresh_token>"}'
 ```
 
 ## 📝 Service Layer
@@ -331,7 +533,10 @@ Quản lý người dùng:
 - `deleteUser()` - Xóa user
 - `getUserById()`, `getUserByUsername()`, `getUserByEmail()` - Tìm user
 - `addRoleToUser()`, `removeRoleFromUser()`, `updateUserRoles()` - Quản lý roles
-- `updateRefreshToken()`, `clearRefreshToken()` - Quản lý refresh token
+- `clearAllRefreshTokens()` - Xóa tất cả refresh tokens của user (logout tất cả thiết bị)
+- `createUserFromRequest()`, `updateUserFromRequest()` - CRUD với DTOs
+- `updateProfile()` - Cập nhật thông tin cá nhân (chỉ user đó)
+- `getCurrentUserProfile()` - Lấy thông tin user hiện tại
 
 ### RoleService
 
@@ -349,9 +554,32 @@ Xác thực:
 - `login()` - Đăng nhập và tạo tokens
 - `refreshToken()` - Làm mới access token
 
+## 📦 Response Format
+
+Tất cả API đều trả về format chuẩn `ApiResponse<T>`:
+
+```json
+{
+  "code": 200,
+  "message": "Thông báo",
+  "status": "SUCCESS",
+  "data": { ... }
+}
+```
+
+### Các status codes:
+- `200` - SUCCESS: Thành công
+- `201` - CREATED: Tạo mới thành công
+- `400` - BAD_REQUEST: Dữ liệu không hợp lệ
+- `401` - UNAUTHORIZED: Chưa đăng nhập hoặc token không hợp lệ
+- `403` - FORBIDDEN: Không có quyền truy cập
+- `404` - NOT_FOUND: Không tìm thấy resource
+- `409` - CONFLICT: Resource đã tồn tại (trùng username/email)
+- `500` - INTERNAL_ERROR: Lỗi server
+
 ## 🐛 Exception Handling
 
-Hệ thống có `GlobalExceptionHandler` để xử lý:
+Hệ thống có `GlobalExceptionHandler` để xử lý và trả về format `ApiResponse`:
 
 - `ResourceNotFoundException` - 404 Not Found
 - `DuplicateResourceException` - 409 Conflict

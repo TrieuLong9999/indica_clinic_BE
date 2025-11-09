@@ -6,14 +6,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.Set;
-
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class UpdateUserRequest {
-    @Size(min = 3, max = 50, message = "Username phải từ 3 đến 50 ký tự")
-    private String username;
+public class UpdateProfileRequest {
+    @Size(max = 100, message = "Họ tên không được quá 100 ký tự")
+    private String fullName;
 
     @Size(min = 6, message = "Password phải có ít nhất 6 ký tự")
     private String password;
@@ -21,14 +19,7 @@ public class UpdateUserRequest {
     @Email(message = "Email không hợp lệ")
     private String email;
 
-    @Size(max = 100, message = "Họ tên không được quá 100 ký tự")
-    private String fullName;
-
     @Size(max = 20, message = "Số điện thoại không được quá 20 ký tự")
     private String phoneNumber;
-
-    private Boolean enabled;
-
-    private Set<String> roles; // Tên các roles: SUPERADMIN, ADMIN, etc.
 }
 

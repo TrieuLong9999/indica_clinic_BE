@@ -30,6 +30,9 @@ public class User {
     @Column(length = 100)
     private String fullName;
 
+    @Column(name = "phone_number", length = 20)
+    private String phoneNumber;
+
     @Column(nullable = false)
     private Boolean enabled = true;
 
